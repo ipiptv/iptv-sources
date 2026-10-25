@@ -46,6 +46,28 @@
             max-width: 1000px;
             margin: 0 auto;
         }
+        .settings-bar {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #334155;
+        }
+        .settings-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .settings-row input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-size: 13px;
+        }
         .source-card {
             background: #1e293b;
             border-radius: 12px;
@@ -79,10 +101,6 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-        .channel-count {
-            color: #94a3b8;
-            font-size: 13px;
         }
         .modal {
             display: none;
@@ -155,12 +173,26 @@
             background: #38bdf8;
             color: #0f172a;
         }
+        .sync-status {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>📺 IPTV 源管理中心</h1>
         <button class="btn btn-primary" onclick="showModal()">+ 添加源</button>
+    </div>
+
+    <div class="settings-bar">
+        <div class="settings-row">
+            <input type="text" id="github-token" placeholder="GitHub Token（用于同步配置）" value="">
+            <input type="text" id="github-repo" placeholder="仓库名，如 ipiptv/collect-txt" value="ipiptv/collect-txt">
+            <button class="btn btn-secondary" onclick="loadFromGitHub()">同步</button>
+        </div>
+        <div class="sync-status" id="sync-status">未同步</div>
     </div>
 
     <div class="container">
@@ -190,54 +222,24 @@
     </div>
 
     <script>
-        let sources = JSON.parse(localStorage.getItem('iptv_sources') || 'null') || [
-            {
-                id: 1,
-                name: '纯净版（推荐）',
-                url: window.location.origin + '/chunjingban.m3u',
-                note: '已测速 · 每日更新',
-                tested: true
-            },
-            {
-                id: 2,
-                name: '央视',
-                url: window.location.origin + '/cctv.m3u',
-                note: 'CCTV 系列',
-                tested: false
-            },
-            {
-                id: 3,
-                name: '卫视',
-                url: window.location.origin + '/weishi.m3u',
-                note: '各省级卫视',
-                tested: false
-            },
-            {
-                id: 4,
-                name: '港澳台',
-                url: window.location.origin + '/gangaotai.m3u',
-                note: '香港、澳门、台湾',
-                tested: false
-            },
-            {
-                id: 5,
-                name: '体育',
-                url: window.location.origin + '/sports.m3u',
-                note: '体育频道',
-                tested: false
-            },
-            {
-                id: 6,
-                name: '4K',
-                url: window.location.origin + '/4k.m3u',
-                note: '超高清',
-                tested: false
-            }
+        const DEFAULT_SOURCES = [
+            { id: 1, name: '纯净版（推荐）', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/chunjingban.m3u', note: '已测速 · 每日更新', tested: true },
+            { id: 2, name: '央视', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/cctv.m3u', note: 'CCTV 系列', tested: false },
+            { id: 3, name: '卫视', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/weishi.m3u', note: '各省级卫视', tested: false },
+            { id: 4, name: '港澳台', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/gangaotai.m3u', note: '香港、澳门、台湾', tested: false },
+            { id: 5, name: '体育', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/sports.m3u', note: '体育频道', tested: false },
+            { id: 6, name: '4K', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/4k.m3u', note: '超高清', tested: false }
         ];
 
+        let sources = JSON.parse(localStorage.getItem('iptv_sources') || 'null') || [...DEFAULT_SOURCES];
         let editingId = null;
+        let configSha = null;
 
-        function saveToStorage() {
+        // 从本地存储加载 Token 和仓库
+        document.getElementById('github-token').value = localStorage.getItem('github_token') || '';
+        document.getElementById('github-repo').value = localStorage.getItem('github_repo') || 'ipiptv/collect-txt';
+
+        function saveToLocal() {
             localStorage.setItem('iptv_sources', JSON.stringify(sources));
         }
 
@@ -286,7 +288,7 @@
             editingId = null;
         }
 
-        function saveSource() {
+        async function saveSource() {
             const name = document.getElementById('source-name').value.trim();
             const url = document.getElementById('source-url').value.trim();
             const note = document.getElementById('source-note').value.trim();
@@ -311,21 +313,23 @@
                 });
             }
 
-            saveToStorage();
+            saveToLocal();
             render();
             hideModal();
+            await syncToGitHub();
+        }
+
+        async function deleteSource(id) {
+            if (confirm('确定删除这个源吗？')) {
+                sources = sources.filter(x => x.id !== id);
+                saveToLocal();
+                render();
+                await syncToGitHub();
+            }
         }
 
         function editSource(id) {
             showModal(id);
-        }
-
-        function deleteSource(id) {
-            if (confirm('确定删除这个源吗？')) {
-                sources = sources.filter(x => x.id !== id);
-                saveToStorage();
-                render();
-            }
         }
 
         function copyUrl(url) {
@@ -334,7 +338,97 @@
             });
         }
 
-        render();
+        async function loadFromGitHub() {
+            const token = document.getElementById('github-token').value.trim();
+            const repo = document.getElementById('github-repo').value.trim();
+            
+            if (!token || !repo) {
+                alert('请填写 GitHub Token 和仓库名');
+                return;
+            }
+
+            localStorage.setItem('github_token', token);
+            localStorage.setItem('github_repo', repo);
+
+            document.getElementById('sync-status').textContent = '正在从 GitHub 读取...';
+
+            try {
+                const res = await fetch(`https://api.github.com/repos/${repo}/contents/iptv_config.json`, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    configSha = data.sha;
+                    const content = decodeURIComponent(escape(atob(data.content)));
+                    sources = JSON.parse(content);
+                    saveToLocal();
+                    render();
+                    document.getElementById('sync-status').textContent = '✅ 已从 GitHub 同步';
+                } else {
+                    document.getElementById('sync-status').textContent = '⚠️ 配置文件不存在，将创建新的';
+                    configSha = null;
+                }
+            } catch (e) {
+                document.getElementById('sync-status').textContent = '❌ 同步失败：' + e.message;
+            }
+        }
+
+        async function syncToGitHub() {
+            const token = document.getElementById('github-token').value.trim();
+            const repo = document.getElementById('github-repo').value.trim();
+            
+            if (!token || !repo) {
+                document.getElementById('sync-status').textContent = '⚠️ 未配置 GitHub Token，仅保存在本地';
+                return;
+            }
+
+            document.getElementById('sync-status').textContent = '正在同步到 GitHub...';
+
+            try {
+                const content = btoa(unescape(encodeURIComponent(JSON.stringify(sources, null, 2))));
+                
+                let url = `https://api.github.com/repos/${repo}/contents/iptv_config.json`;
+                let body = {
+                    message: 'update iptv config',
+                    content: content
+                };
+
+                if (configSha) {
+                    body.sha = configSha;
+                }
+
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    configSha = data.content.sha;
+                    document.getElementById('sync-status').textContent = '✅ 已同步到 GitHub';
+                } else {
+                    const err = await res.json();
+                    document.getElementById('sync-status').textContent = '❌ 同步失败：' + err.message;
+                }
+            } catch (e) {
+                document.getElementById('sync-status').textContent = '❌ 同步失败：' + e.message;
+            }
+        }
+
+        // 页面加载时自动同步
+        window.onload = function() {
+            render();
+            const token = document.getElementById('github-token').value.trim();
+            const repo = document.getElementById('github-repo').value.trim();
+            if (token && repo) {
+                loadFromGitHub();
+            }
+        };
     </script>
 </body>
 </html>
