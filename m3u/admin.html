@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV 源管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 20px;
+        }
+        .header {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            font-size: 24px;
+        }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .btn-primary {
+            background: #38bdf8;
+            color: #0f172a;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-secondary {
+            background: #334155;
+            color: #e2e8f0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .settings-bar {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #334155;
+        }
+        .settings-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .settings-row input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-size: 13px;
+        }
+        .source-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            border: 1px solid #334155;
+        }
+        .source-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .source-name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .source-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .source-url {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            color: #4ade80;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.show {
+            display: flex;
+        }
+        .modal-content {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            border: 1px solid #334155;
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-size: 14px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        .badge-green {
+            background: #22c55e;
+            color: white;
+        }
+        .badge-orange {
+            background: #f97316;
+            color: white;
+        }
+        .badge-blue {
+            background: #38bdf8;
+            color: #0f172a;
+        }
+        .sync-status {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📺 IPTV 源管理中心</h1>
+        <button class="btn btn-primary" onclick="showModal()">+ 添加源</button>
+    </div>
+
+    <div class="settings-bar">
+        <div class="settings-row">
+            <input type="text" id="github-token" placeholder="GitHub Token（用于同步配置）" value="">
+            <input type="text" id="github-repo" placeholder="仓库名，如 ipiptv/collect-txt" value="ipiptv/collect-txt">
+            <button class="btn btn-secondary" onclick="loadFromGitHub()">同步</button>
+        </div>
+        <div class="sync-status" id="sync-status">未同步</div>
+    </div>
+
+    <div class="container">
+        <div id="source-list"></div>
+    </div>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="modal-title" id="modal-title">添加新源</div>
+            <div class="form-group">
+                <label>名称</label>
+                <input type="text" id="source-name" placeholder="例如：纯净版、央视、卫视">
+            </div>
+            <div class="form-group">
+                <label>地址 (URL)</label>
+                <input type="text" id="source-url" placeholder="https://example.com/source.m3u">
+            </div>
+            <div class="form-group">
+                <label>备注（可选）</label>
+                <input type="text" id="source-note" placeholder="例如：已测速、每日更新">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="hideModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveSource()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_SOURCES = [
+            { id: 1, name: '纯净版（推荐）', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/chunjingban.m3u', note: '已测速 · 每日更新', tested: true },
+            { id: 2, name: '央视', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/cctv.m3u', note: 'CCTV 系列', tested: false },
+            { id: 3, name: '卫视', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/weishi.m3u', note: '各省级卫视', tested: false },
+            { id: 4, name: '港澳台', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/gangaotai.m3u', note: '香港、澳门、台湾', tested: false },
+            { id: 5, name: '体育', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/sports.m3u', note: '体育频道', tested: false },
+            { id: 6, name: '4K', url: 'https://cdn.jsdelivr.net/gh/ipiptv/collect-txt@main/4k.m3u', note: '超高清', tested: false }
+        ];
+
+        let sources = JSON.parse(localStorage.getItem('iptv_sources') || 'null') || [...DEFAULT_SOURCES];
+        let editingId = null;
+        let configSha = null;
+
+        // 从本地存储加载 Token 和仓库
+        document.getElementById('github-token').value = localStorage.getItem('github_token') || '';
+        document.getElementById('github-repo').value = localStorage.getItem('github_repo') || 'ipiptv/collect-txt';
+
+        function saveToLocal() {
+            localStorage.setItem('iptv_sources', JSON.stringify(sources));
+        }
+
+        function render() {
+            const container = document.getElementById('source-list');
+            container.innerHTML = sources.map(s => `
+                <div class="source-card">
+                    <div class="source-header">
+                        <div>
+                            <span class="source-name">${s.name}</span>
+                            ${s.tested ? '<span class="badge badge-green">已测速</span>' : '<span class="badge badge-orange">未测速</span>'}
+                            ${s.note ? `<span class="badge badge-blue">${s.note}</span>` : ''}
+                        </div>
+                        <div class="source-actions">
+                            <button class="btn btn-secondary" onclick="editSource(${s.id})">编辑</button>
+                            <button class="btn btn-danger" onclick="deleteSource(${s.id})">删除</button>
+                        </div>
+                    </div>
+                    <div class="source-url">
+                        <span>${s.url}</span>
+                        <button class="btn btn-primary" onclick="copyUrl('${s.url}')">复制</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showModal(id = null) {
+            editingId = id;
+            if (id) {
+                const s = sources.find(x => x.id === id);
+                document.getElementById('modal-title').textContent = '编辑源';
+                document.getElementById('source-name').value = s.name;
+                document.getElementById('source-url').value = s.url;
+                document.getElementById('source-note').value = s.note || '';
+            } else {
+                document.getElementById('modal-title').textContent = '添加新源';
+                document.getElementById('source-name').value = '';
+                document.getElementById('source-url').value = '';
+                document.getElementById('source-note').value = '';
+            }
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function hideModal() {
+            document.getElementById('modal').classList.remove('show');
+            editingId = null;
+        }
+
+        async function saveSource() {
+            const name = document.getElementById('source-name').value.trim();
+            const url = document.getElementById('source-url').value.trim();
+            const note = document.getElementById('source-note').value.trim();
+            
+            if (!name || !url) {
+                alert('请填写名称和地址');
+                return;
+            }
+
+            if (editingId) {
+                const s = sources.find(x => x.id === editingId);
+                s.name = name;
+                s.url = url;
+                s.note = note;
+            } else {
+                sources.push({
+                    id: Date.now(),
+                    name,
+                    url,
+                    note,
+                    tested: false
+                });
+            }
+
+            saveToLocal();
+            render();
+            hideModal();
+            await syncToGitHub();
+        }
+
+        async function deleteSource(id) {
+            if (confirm('确定删除这个源吗？')) {
+                sources = sources.filter(x => x.id !== id);
+                saveToLocal();
+                render();
+                await syncToGitHub();
+            }
+        }
+
+        function editSource(id) {
+            showModal(id);
+        }
+
+        function copyUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('已复制：' + url);
+            });
+        }
+
+        async function loadFromGitHub() {
+            const token = document.getElementById('github-token').value.trim();
+            const repo = document.getElementById('github-repo').value.trim();
+            
+            if (!token || !repo) {
+                alert('请填写 GitHub Token 和仓库名');
+                return;
+            }
+
+            localStorage.setItem('github_token', token);
+            localStorage.setItem('github_repo', repo);
+
+            document.getElementById('sync-status').textContent = '正在从 GitHub 读取...';
+
+            try {
+                const res = await fetch(`https://api.github.com/repos/${repo}/contents/iptv_config.json`, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    configSha = data.sha;
+                    const content = decodeURIComponent(escape(atob(data.content)));
+                    sources = JSON.parse(content);
+                    saveToLocal();
+                    render();
+                    document.getElementById('sync-status').textContent = '✅ 已从 GitHub 同步';
+                } else {
+                    document.getElementById('sync-status').textContent = '⚠️ 配置文件不存在，将创建新的';
+                    configSha = null;
+                }
+            } catch (e) {
+                document.getElementById('sync-status').textContent = '❌ 同步失败：' + e.message;
+            }
+        }
+
+        async function syncToGitHub() {
+            const token = document.getElementById('github-token').value.trim();
+            const repo = document.getElementById('github-repo').value.trim();
+            
+            if (!token || !repo) {
+                document.getElementById('sync-status').textContent = '⚠️ 未配置 GitHub Token，仅保存在本地';
+                return;
+            }
+
+            document.getElementById('sync-status').textContent = '正在同步到 GitHub...';
+
+            try {
+                const content = btoa(unescape(encodeURIComponent(JSON.stringify(sources, null, 2))));
+                
+                let url = `https://api.github.com/repos/${repo}/contents/iptv_config.json`;
+                let body = {
+                    message: 'update iptv config',
+                    content: content
+                };
+
+                if (configSha) {
+                    body.sha = configSha;
+                }
+
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    configSha = data.content.sha;
+                    document.getElementById('sync-status').textContent = '✅ 已同步到 GitHub';
+                } else {
+                    const err = await res.json();
+                    document.getElementById('sync-status').textContent = '❌ 同步失败：' + err.message;
+                }
+            } catch (e) {
+                document.getElementById('sync-status').textContent = '❌ 同步失败：' + e.message;
+            }
+        }
+
+        // 页面加载时自动同步
+        window.onload = function() {
+            render();
+            const token = document.getElementById('github-token').value.trim();
+            const repo = document.getElementById('github-repo').value.trim();
+            if (token && repo) {
+                loadFromGitHub();
+            }
+        };
+    </script>
+</body>
+</html>
