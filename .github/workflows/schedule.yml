@@ -62,7 +62,7 @@ jobs:
           if [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
             pnpm static
             tree m3u
-            npx wrangler pages deploy m3u --project-name="${PROJECT_NAME}"
+            npx wrangler pages deploy m3u --project-name="${PROJECT_NAME}" --branch=main
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
